@@ -4,6 +4,10 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import folium
 from streamlit_folium import st_folium
+import plotly.graph_objects as go
+import plotly.express as px
+
+
 
 import geopandas as gpd
 
@@ -45,7 +49,7 @@ df = carregar_dados ()
 st.sidebar.title ('Menu de Navegação')
 pagina = st.sidebar.radio (
     "Escolha a Visualização:",
-    ["Visão Geral", "Regional", "Município"]
+    ["Visão Geral", "Regional", "Análise de Impacto"]
 )
 
 # --- Página: Visão Geral ---
@@ -346,24 +350,327 @@ elif pagina == "Regional":
 
 
 
-# --- Página: Município ---
-elif pagina == "Município":
-    st.title ("🏫 Análise por Município")
+# --- Página: Análise de Impacto ---################################################################
 
-    municipios = df ['municipio'].dropna ().unique ()
-    municipio_selecionado = st.sidebar.selectbox ('Selecione o Município:', options=sorted (municipios))
+elif pagina == "Análise de Impacto":
+    st.title("📊 Análise de Impacto das Rotinas Pedagógicas")
 
-    df_filtrado = df [df ['municipio'] == municipio_selecionado]
+    # --- Carregamento das bases específicas ---
+    @st.cache_data
+    def carregar_bases_impacto():
+        df_paebes = pd.read_csv('data/paebesMun_23e24.csv', encoding='utf-8-sig')
+        df_ama = pd.read_csv('data/ama_2serie_2024_2025_merged.csv', encoding='utf-8-sig')
+        df_escolas = pd.read_csv('data/dados_escolas.csv', encoding='utf-8-sig')
+        return df_paebes, df_ama, df_escolas
 
-    st.write (f"Total de escolas no Município {municipio_selecionado}: {df_filtrado.shape [0]}")
+    df_paebes, df_ama, df_escolas = carregar_bases_impacto()
 
-    # Exemplo: Mapa das escolas no município
-    m = folium.Map (location=[-20.3, -40.3], zoom_start=8)
+    # --- Filtros laterais compartilhados ---
+    st.sidebar.markdown("### 🎯 Filtros de Recorte")
+    regioes_disponiveis = sorted(df_paebes['regional'].dropna().unique())
+    selecao_regional = st.sidebar.selectbox("Selecione a Regional:", options=["Todas"] + regioes_disponiveis)
 
-    for index, row in df_filtrado.iterrows ():
-        folium.Marker (
-            location=[row ['latitude'], row ['longitude']],
-            popup=f"{row ['nome_escola']} - IDEBES: {row ['idebes']}"
-        ).add_to (m)
+    selecao_municipio = "Todos"
+    if selecao_regional != "Todas":
+        df_paebes = df_paebes[df_paebes['regional'] == selecao_regional]
+        df_ama = df_ama[df_ama['NM_REGIONAL'] == selecao_regional]
+        df_escolas = df_escolas[df_escolas['regional'] == selecao_regional]
 
-    st_folium (m, width=900, height=600)
+        municipios_disponiveis = sorted(df_paebes['municipio'].dropna().unique())
+        selecao_municipio = st.sidebar.selectbox("Filtrar por Município:", ["Todos"] + municipios_disponiveis)
+        if selecao_municipio != "Todos":
+            df_paebes = df_paebes[df_paebes['municipio'] == selecao_municipio]
+            df_ama = df_ama[df_ama['NM_MUNICIPIO'] == selecao_municipio]
+            df_escolas = df_escolas[df_escolas['municipio'] == selecao_municipio]
+
+    # ================= VELOCÍMETROS =================
+
+    st.markdown("## 🎯 Evolução Geral - AMA (Escolas) e Paebes (Municípios)")
+
+    # --- Cálculo da média LP/MAT para AMA ---
+    df_ama['TX_ACERTO_24'] = pd.to_numeric(df_ama['TX_ACERTO_24'], errors='coerce')
+    df_ama['TX_ACERTO_25'] = pd.to_numeric(df_ama['TX_ACERTO_25'], errors='coerce')
+    df_ama_valid = df_ama.dropna(subset=['TX_ACERTO_24', 'TX_ACERTO_25'])
+    total_escolas = df_ama_valid.shape[0]
+    escolas_evoluiram = df_ama_valid[df_ama_valid['TX_ACERTO_25'] > df_ama_valid['TX_ACERTO_24']].shape[0]
+
+    # --- Paebes ---
+    df_paebes['proficiencia_media_23'] = pd.to_numeric(df_paebes['proficiencia_media_23'], errors='coerce')
+    df_paebes['proficiencia_media_24'] = pd.to_numeric(df_paebes['proficiencia_media_24'], errors='coerce')
+    df_paebes_valid = df_paebes.dropna(subset=['proficiencia_media_23', 'proficiencia_media_24'])
+    total_municipios = df_paebes_valid.shape[0]
+    municipios_evoluiram = df_paebes_valid[df_paebes_valid['proficiencia_media_24'] > df_paebes_valid['proficiencia_media_23']].shape[0]
+
+    # --- Porcentagens ---
+    perc_escolas = (escolas_evoluiram / total_escolas) * 100 if total_escolas > 0 else 0
+    perc_municipios = (municipios_evoluiram / total_municipios) * 100 if total_municipios > 0 else 0
+
+    # --- Velocímetros com Plotly ---
+    col1, col2 = st.columns(2)
+
+    with col1:
+        fig_escolas = go.Figure(go.Indicator(
+            mode="gauge+number",
+            value=perc_escolas,
+            title={'text': "Escolas com Evolução (AMA)"},
+            gauge={
+                'axis': {'range': [0, 100]},
+                'bar': {'color': "darkblue"},
+                'steps': [
+                    {'range': [0, 50], 'color': 'lightcoral'},
+                    {'range': [50, 75], 'color': 'khaki'},
+                    {'range': [75, 100], 'color': 'lightgreen'}
+                ],
+            }
+        ))
+        st.plotly_chart(fig_escolas, use_container_width=True)
+
+    with col2:
+        fig_mun = go.Figure(go.Indicator(
+            mode="gauge+number",
+            value=perc_municipios,
+            title={'text': "Municípios com Evolução (Paebes)"},
+            gauge={
+                'axis': {'range': [0, 100]},
+                'bar': {'color': "darkgreen"},
+                'steps': [
+                    {'range': [0, 50], 'color': 'lightcoral'},
+                    {'range': [50, 75], 'color': 'khaki'},
+                    {'range': [75, 100], 'color': 'lightgreen'}
+                ],
+            }
+        ))
+        st.plotly_chart(fig_mun, use_container_width=True)
+
+    # A PARTIR DAQUI CONTINUAM OS BOXPLOTS (já usando os dados filtrados acima)
+
+
+#============================== boxplot AMA ===========================================================
+
+
+st.markdown("### Distribuição da Taxa de Acerto - AMA 2024 x 2025")
+
+fig = go.Figure()
+
+# --- Língua Portuguesa ---
+fig.add_trace(go.Box(
+    y=df_ama[df_ama['NM_DISCIPLINA'] == 'Língua Portuguesa']['TX_ACERTO_24'],
+    name='LP - 2024',
+    marker_color='blue',
+    width = 0.5
+))
+
+fig.add_trace(go.Box(
+    y=df_ama[df_ama['NM_DISCIPLINA'] == 'Língua Portuguesa']['TX_ACERTO_25'],
+    name='LP - 2025',
+    marker_color='lightblue',
+    width = 0.5
+))
+
+# --- Matemática ---
+fig.add_trace(go.Box(
+    y=df_ama[df_ama['NM_DISCIPLINA'] == 'Matemática']['TX_ACERTO_24'],
+    name='MAT - 2024',
+    marker_color='green',
+    width = 0.5
+))
+
+fig.add_trace(go.Box(
+    y=df_ama[df_ama['NM_DISCIPLINA'] == 'Matemática']['TX_ACERTO_25'],
+    name='MAT - 2025',
+    marker_color='lightgreen',
+    width = 0.5
+
+))
+
+fig.update_layout(
+    boxmode='group',         # Agrupa lado a lado
+    boxgap=0.1,              # Espaço entre boxplots (menor valor = mais largas)
+    boxgroupgap=0.1,         # Espaço entre grupos
+    showlegend=False,
+    width=800,
+    height=400,
+    margin=dict(l=40, r=40, t=40, b=40)
+)
+
+st.plotly_chart(fig, use_container_width=False)
+
+#================================ Boxplot Paebes ===============================================================
+
+import plotly.graph_objects as go
+
+
+st.markdown("### 📊 Evolução da Proficiência Média no Paebes (Matemática)")
+
+df_plot = df_paebes.copy()
+df_plot = df_plot.dropna(subset=['proficiencia_media_23', 'proficiencia_media_24'])
+
+# Filtro por regional ou município, se existir
+if selecao_regional != "Todas":
+    df_plot = df_plot[df_plot['regional'] == selecao_regional]
+if selecao_municipio != "Todos":
+    df_plot = df_plot[df_plot['municipio'] == selecao_municipio]
+
+# Criar figura
+fig = go.Figure()
+
+# MAT - 2023
+fig.add_trace(go.Box(
+    y=df_plot['proficiencia_media_23'],
+    name="MAT - 2023",
+    marker_color='green'
+))
+
+# MAT - 2024
+fig.add_trace(go.Box(
+    y=df_plot['proficiencia_media_24'],
+    name="MAT - 2024",
+    marker_color='lightgreen'
+))
+
+# Layout
+fig.update_layout(
+    showlegend=False,
+    yaxis_title="Proficiência Média",
+    xaxis_title="",
+    template="plotly_dark",
+    boxmode='group',         # Agrupa lado a lado
+    boxgap=0.1,              # Espaço entre boxplots (menor valor = mais largas)
+    boxgroupgap=0.1,         # Espaço entre grupos
+    width=800,
+    height=400,
+    margin=dict(l=40, r=40, t=40, b=40)
+)
+
+st.plotly_chart(fig, use_container_width=False)
+
+#============================= Histogramas =============================================
+import unidecode
+
+if selecao_regional == "Todas":
+    # Agrupar por regional
+    df_ama_grouped = df_ama.groupby('NM_REGIONAL')[['TX_ACERTO_24', 'TX_ACERTO_25']].mean().reset_index()
+    df_ama_grouped['evolucao_ama'] = ((df_ama_grouped['TX_ACERTO_25'] - df_ama_grouped['TX_ACERTO_24']) / df_ama_grouped['TX_ACERTO_24']) * 100
+
+    df_paebes_grouped = df_paebes.groupby('regional')[['proficiencia_media_23', 'proficiencia_media_24']].mean().reset_index()
+    df_paebes_grouped['evolucao_proficiencia'] = ((df_paebes_grouped['proficiencia_media_24'] - df_paebes_grouped['proficiencia_media_23']) / df_paebes_grouped['proficiencia_media_23']) * 100
+
+    df_paebes_grouped.rename(columns={'regional': 'grupo'}, inplace=True)
+    df_ama_grouped.rename(columns={'NM_REGIONAL': 'grupo'}, inplace=True)
+else:
+    # Agrupar por município
+    df_ama_grouped = df_ama.groupby('NM_MUNICIPIO')[['TX_ACERTO_24', 'TX_ACERTO_25']].mean().reset_index()
+    df_ama_grouped['evolucao_ama'] = ((df_ama_grouped['TX_ACERTO_25'] - df_ama_grouped['TX_ACERTO_24']) / df_ama_grouped['TX_ACERTO_24']) * 100
+
+    df_paebes_grouped = df_paebes.groupby('municipio')[['proficiencia_media_23', 'proficiencia_media_24']].mean().reset_index()
+    df_paebes_grouped['evolucao_proficiencia'] = ((df_paebes_grouped['proficiencia_media_24'] - df_paebes_grouped['proficiencia_media_23']) / df_paebes_grouped['proficiencia_media_23']) * 100
+
+    df_paebes_grouped.rename(columns={'municipio': 'grupo'}, inplace=True)
+    df_ama_grouped.rename(columns={'NM_MUNICIPIO': 'grupo'}, inplace=True)
+
+df_merged = pd.merge(df_ama_grouped[['grupo', 'evolucao_ama']],
+                     df_paebes_grouped[['grupo', 'evolucao_proficiencia']],
+                     on='grupo', how='inner')
+
+df_plot = df_merged.melt(id_vars='grupo',
+                         value_vars=['evolucao_ama', 'evolucao_proficiencia'],
+                         var_name='Fonte', value_name='Evolução (%)')
+
+df_plot['Fonte'] = df_plot['Fonte'].map({
+    'evolucao_ama': 'AMA 2024→2025',
+    'evolucao_proficiencia': 'Paebes 2023→2024'
+})
+df_plot['Evolução (%)'] = df_plot['Evolução (%)'].round(1)
+
+fig = px.bar(df_plot,
+             x='grupo',
+             y='Evolução (%)',
+             color='Fonte',
+             barmode='group',
+             title='Evolução Percentual por ' + ('Regional' if selecao_regional == 'Todas' else 'Município') + ' - AMA e Paebes')
+
+fig.update_layout(
+    xaxis_title="Regional" if selecao_regional == "Todas" else "Município",
+    yaxis_title="Evolução (%)",
+    margin=dict(l=40, r=40, t=40, b=40),
+    xaxis_tickangle=-45
+)
+
+st.plotly_chart(fig, use_container_width=True)
+
+# ==================== Gráfico de Barras Empilhadas Comparativo - Níveis AMA 2024 vs 2025 ====================
+import plotly.express as px
+import pandas as pd
+import unidecode  # certifique-se de ter instalado
+
+# --- Dados para plotagem
+nivel_cores = {
+    'Muito Baixo': '#f94144',
+    'Baixo': '#f3722c',
+    'Médio': '#f9c74f',
+    'Alto': '#90be6d'
+}
+
+# Definir se será por regional ou município
+agrupador = 'NM_REGIONAL' if selecao_regional == "Todas" else 'NM_MUNICIPIO'
+
+dados_plot = []
+
+for _, row in df_ama.groupby (agrupador).sum ().reset_index ().iterrows ():
+    nome_base = row [agrupador]
+    total_24 = row [[col for col in df_ama.columns if '_24' in col and col.startswith ('ct_')]].sum ()
+    total_25 = row [[col for col in df_ama.columns if '_25' in col and col.startswith ('ct_')]].sum ()
+
+    for nivel in ['Alto', 'Médio', 'Baixo', 'Muito Baixo']:
+        nivel_col = unidecode.unidecode (nivel.lower ()).replace (" ", "_")
+
+        # Ano 2024
+        valor_24 = row.get (f'ct_{nivel_col}_24', 0)
+        perc_24 = round (valor_24 / total_24 * 100, 1) if total_24 > 0 else 0
+        dados_plot.append ({
+            agrupador: f"{nome_base} (2024)",
+            'Ano': '2024',
+            'Nível': nivel,
+            'Valor': perc_24,
+            'Cor': nivel_cores [nivel]
+        })
+
+        # Ano 2025
+        valor_25 = row.get (f'ct_{nivel_col}_25', 0)
+        perc_25 = round (valor_25 / total_25 * 100, 1) if total_25 > 0 else 0
+        dados_plot.append ({
+            agrupador: f"{nome_base} (2025)",
+            'Ano': '2025',
+            'Nível': nivel,
+            'Valor': perc_25,
+            'Cor': nivel_cores [nivel]
+        })
+
+# Criar DataFrame para plotagem
+df_barras = pd.DataFrame (dados_plot)
+
+# Gráfico
+st.markdown ("### 🧮 Distribuição dos Níveis de Desempenho - AMA (2024 vs 2025)")
+
+fig = px.bar (
+    df_barras,
+    x=agrupador,
+    y='Valor',
+    color='Nível',
+    color_discrete_map=nivel_cores,
+    text='Valor',
+    title='Distribuição Percentual dos Níveis por Ano',
+    category_orders={'Nível': ['Muito Baixo', 'Baixo', 'Médio', 'Alto']}
+)
+
+fig.update_traces (texttemplate='%{text:.1f}%', textposition='inside', marker_line_width=0.5, marker_line_color='black')
+fig.update_layout (barmode='stack', xaxis_title='', yaxis_title='Porcentagem (%)', height=500)
+
+st.plotly_chart (fig, use_container_width=True)
+
+
+
+
+
+
+
