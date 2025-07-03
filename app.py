@@ -1,3 +1,4 @@
+# ############################################################################################## IMPORTAÇÕES ##########
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -5,11 +6,20 @@ import seaborn as sns
 import folium
 from streamlit_folium import st_folium
 import plotly.graph_objects as go
-import plotly.express as px
-
-
-
 import geopandas as gpd
+from folium.plugins import HeatMap
+from streamlit_folium import st_folium
+import branca.colormap as cm
+
+# ################################################################################ CONFIGURAÇÃO INICIAL  ##############
+
+# --- Menu lateral ---
+st.sidebar.title ('Menu de Navegação')
+pagina = st.sidebar.radio (
+    "Escolha a Visualização:",
+    ["Visão Geral", "Regional", "Análise de Impacto"]
+)
+########################################################################################## DADOS GEOGRÁFICOS ###########
 
 @st.cache_data
 def carregar_geodados():
@@ -31,38 +41,24 @@ def carregar_geodados():
 
 gdf_mapa = carregar_geodados()
 
-
-# --- Configuração inicial ---
 st.set_page_config (page_title='Painel Educacional - SEDU', layout='wide')
 
+# --- Carregamento da base de escolas---
 
-# --- Carregamento da base ---
-@st.cache_data
-def carregar_dados():
-    df = pd.read_csv ('data/dados_escolas.csv', encoding='utf-8-sig')
-    return df
+df = pd.read_csv ('data/dados_escolas.csv', encoding='utf-8-sig') #⚠️
 
+#<<<###############################################################--- Página: Visão Geral #######################>>>
 
-df = carregar_dados ()
-
-# --- Menu lateral ---
-st.sidebar.title ('Menu de Navegação')
-pagina = st.sidebar.radio (
-    "Escolha a Visualização:",
-    ["Visão Geral", "Regional", "Análise de Impacto"]
-)
-
-# --- Página: Visão Geral ---
 if pagina == "Visão Geral":
     st.subheader ("Distribuição do Idebes por Regional")
 
-    regionais = sorted (df ['regional'].dropna ().unique ())
+    regionais = sorted (df ['regional'].dropna ().unique ()) # #⚠️ Listagem das regionais a partir do dataframe das escolas
 
     fig, axes = plt.subplots (4, 3, figsize=(15, 10))
     axes = axes.flatten ()
 
     for idx, reg in enumerate (regionais):
-        df_reg = df [df ['regional'] == reg]
+        df_reg = df [df ['regional'] == reg] # #⚠️Cria um dataframe da regional a partir do dataframe das escolas
         sns.boxplot (y=df_reg ['idebes'], ax=axes [idx])
         axes [idx].set_title (f"Regional: {reg}")
         axes [idx].set_ylabel ('Idebes')
@@ -78,7 +74,7 @@ if pagina == "Visão Geral":
     st.subheader ("Média Normalizada de AMA, Olimpíada e Idebes por Regional")
 
     # Normalizar AMA
-    df_media = df.groupby ('regional') [['ama_tx_acerto', 'olimpiada', 'idebes']].mean ().reset_index ()
+    df_media = df.groupby ('regional') [['ama_tx_acerto', 'olimpiada', 'idebes']].mean ().reset_index ()#⚠️
     df_media ['ama_tx_acerto'] = df_media ['ama_tx_acerto'] / 10  # Normalizando para 0 a 10
 
     # Reformatar para plotagem
@@ -95,65 +91,17 @@ if pagina == "Visão Geral":
     # Remover rótulos de valor nas barras (por enquanto)
     st.pyplot (fig)
 
-    st.subheader ("Mapa Coroplético - Regionalização")
+#<<############################################################################# --- Página: Regional ---############>>
 
-    import geopandas as gpd
-    import folium
-    from streamlit_folium import st_folium
-    import matplotlib.colors as mcolors
-
-    # Ler shapefile e CSV de regionais
-    gdf_municipios = gpd.read_file ('data/shapefile_es/ES_Municipios_2024.shp')
-    df_municipios_regionais = pd.read_csv ('data/municipios_por_regional.csv', encoding='utf-8-sig')
-    df_municipios_regionais.rename (columns={'NM_MUN': 'municipio'}, inplace=True)
-
-    # Normalização
-    gdf_municipios ['municipio'] = gdf_municipios ['NM_MUN'].str.upper ().str.strip ()
-    df_municipios_regionais ['municipio'] = df_municipios_regionais ['municipio'].str.upper ().str.strip ()
-
-    # Merge
-    gdf_mapa = gdf_municipios.merge (df_municipios_regionais, on='municipio', how='left')
-
-    # Simplificação para melhorar a performance no Streamlit
-    gdf_mapa ['geometry'] = gdf_mapa ['geometry'].simplify (0.001, preserve_topology=True)
-
-    # Criar mapa
-    m = folium.Map (location=[-20, -40.3], zoom_start=8)
-
-    # Cores distintas para cada regional
-    regionais_unicas = gdf_mapa ['regional'].dropna ().unique ()
-    color_list = list (mcolors.TABLEAU_COLORS.values ()) [:len (regionais_unicas)]
-    color_dict = dict (zip (regionais_unicas, color_list))
-
-    # Adicionar polígonos
-    for _, row in gdf_mapa.iterrows ():
-        if pd.notnull (row ['regional']):
-            cor = color_dict.get (row ['regional'], 'gray')
-            folium.GeoJson (
-                row ['geometry'],
-                style_function=lambda x, color=cor: {
-                    'fillColor': color,
-                    'color': 'black',
-                    'weight': 0.5,
-                    'fillOpacity': 0.6
-                },
-                tooltip=f"{row ['municipio']} - {row ['regional']}"
-            ).add_to (m)
-
-    st_folium (m, width=900, height=900)
-
-
-
-# --- Página: Regional ---
 elif pagina == "Regional":
 
     st.title ("📍 Análise por Regional")
        # --- Seletor de Regional ---
-    regionais = sorted (df ['regional'].dropna ().unique ())
+    regionais = sorted (df ['regional'].dropna ().unique ()) # #⚠️
     selecao_regional = st.sidebar.selectbox ("Selecione a Regional:", regionais)
 
     # --- Filtrar a base para a regional escolhida ---
-    df_regional = df[df['regional'] == selecao_regional]
+    df_regional = df[df['regional'] == selecao_regional] #⚠️
 
     # --- HISTOGRAMA POR MUNICÍPIO: IDEBES, AMA, OLIMPÍADA ---
     st.markdown ("### Comparativo entre Municípios da Regional")
@@ -183,10 +131,7 @@ elif pagina == "Regional":
 
     st.pyplot (fig)
 
-    import folium
-    from folium.plugins import HeatMap
-    from streamlit_folium import st_folium
-    import branca.colormap as cm
+#__________________________________________________________________________________________ Mapa Idebes por escola_____
 
     st.markdown ("### Mapa de Desempenho - Idebes por Escola")
 
@@ -350,7 +295,7 @@ elif pagina == "Regional":
 
 
 
-# --- Página: Análise de Impacto ---################################################################
+####################################################################################### Página: Análise de Impacto ####
 
 elif pagina == "Análise de Impacto":
     st.title("📊 Análise de Impacto das Rotinas Pedagógicas")
@@ -367,7 +312,17 @@ elif pagina == "Análise de Impacto":
 
     df_paebes, df_paebes_lp, df_ama, df_escolas  = carregar_bases_impacto()
 
+    # ---- Ajuste no nome das regionais ----
+    def ajustar_string(df, coluna, termo_antigo, termo_novo):
+        df [coluna] = df [coluna].astype (str).str.replace (termo_antigo, termo_novo, regex=False)
+        return df
+    ajustar_string(df_ama, 'NM_REGIONAL', 'SRE COMENDADORA JUREMA MORETZ SOHN', "SRE GUACUI")
+    ajustar_string(df_paebes, 'regional', 'SRE COMENDADORA JUREMA MORETZ SOHN', "SRE GUACUI")
+    ajustar_string(df_paebes_lp, 'regional', 'SRE COMENDADORA JUREMA MORETZ SOHN', "SRE GUACUI")
+
+
     # --- Filtros laterais compartilhados ---
+
     st.sidebar.markdown("### 🎯 Filtros de Recorte")
     regioes_disponiveis = sorted(df_paebes['regional'].dropna().unique())
     selecao_regional = st.sidebar.selectbox("Selecione a Regional:", options=["Todas"] + regioes_disponiveis)
@@ -611,10 +566,13 @@ elif pagina == "Análise de Impacto":
 
 
     df_agrupado = pd.concat([df_total, df_agrupado], ignore_index=True)
+    df_agrupado = df_agrupado.sort_values (by='agrupador', key=lambda col: col.ne (titulo_geral)).reset_index (
+        drop=True)
 
     # --- Agrupar e somar ---
     df_ama_grouped = df_agrupado.groupby('agrupador').agg({nivel + suf: 'sum' for nivel in niveis for suf in ['_24', '_25']}).reset_index()
-
+    df_ama_grouped = df_ama_grouped.sort_values (by='agrupador', key=lambda col: col.ne (titulo_geral)).reset_index (
+        drop=True)
     # --- Preparar grid de subplots ---
     num_graficos = df_ama_grouped.shape[0]
     num_colunas = 4
@@ -672,7 +630,7 @@ elif pagina == "Análise de Impacto":
     st.markdown("### Distribuição dos Níveis de Desempenho - AMA (2024 x 2025)")
     st.plotly_chart(fig_grid, use_container_width=False)
 
-    #################################################
+    ####################### Paebes 2023 e 2024 Barra Empilhadas ##########################
 
     # --- Unir as bases de LP e Matemática ---
     df_paebes['disciplina'] = 'Matemática'
@@ -733,11 +691,11 @@ elif pagina == "Análise de Impacto":
 
     # --- Selecionar agrupamento de acordo com o filtro ---
     if selecao_regional == "Todas":
-        df_agrupado = df_paebes_niveis[df_paebes_niveis['tipo'] == 'municipio'].copy()
-        df_agrupado['agrupador'] = df_agrupado['municipio']
+        df_agrupado = df_paebes_niveis[df_paebes_niveis['tipo'] == 'regional'].copy()
+        df_agrupado['agrupador'] = df_agrupado['regional']
         titulo_geral = 'Espírito Santo'
         filtro_superior = df_paebes_niveis[df_paebes_niveis['tipo'] == 'regional'].copy()
-        filtro_superior = filtro_superior.rename(columns={'municipio': 'agrupador'})
+        filtro_superior = filtro_superior.rename(columns={'regional': 'agrupador'})
         filtro_superior = filtro_superior[filtro_superior['agrupador'] == titulo_geral]
     else:
         df_agrupado = df_paebes_niveis[(df_paebes_niveis['regional'] == selecao_regional) & (df_paebes_niveis['tipo'] == 'municipio')].copy()
@@ -748,11 +706,25 @@ elif pagina == "Análise de Impacto":
 
     # --- Adicionar gráfico total no topo ---
     colunas_niveis = [nivel + suf for nivel in niveis for suf in ['_23', '_24']]
-    df_total = filtro_superior[colunas_niveis + ['agrupador']]
-    df_agrupado = pd.concat([df_total, df_agrupado], ignore_index=True)
+
+    if selecao_regional == "Todas":
+        dados_total = df_agrupado [colunas_niveis].sum ()
+        dados_total ['agrupador'] = 'Espírito Santo'
+    else:
+        dados_total = df_agrupado [colunas_niveis].sum ()
+        dados_total ['agrupador'] = selecao_regional
+
+    # Converter para DataFrame e adicionar
+    df_total = pd.DataFrame ([dados_total])
+    df_agrupado = pd.concat ([df_total, df_agrupado], ignore_index=True)
+    # Reorganiza para garantir que o gráfico total fique na primeira posição
+    df_agrupado = df_agrupado.sort_values (by='agrupador', key=lambda col: col.ne (titulo_geral)).reset_index (
+        drop=True)
 
     # --- Agrupamento final ---
     df_paebes_grouped = df_agrupado.groupby('agrupador').agg({col: 'sum' for col in colunas_niveis}).reset_index()
+    df_paebes_grouped = df_paebes_grouped.sort_values (by='agrupador', key=lambda col: col.ne (titulo_geral)).reset_index (
+        drop=True)
 
     # --- Subplots grid ---
     num_graficos = df_paebes_grouped.shape[0]
@@ -808,10 +780,127 @@ elif pagina == "Análise de Impacto":
 
     # --- Renderização ---
     st.markdown("### Distribuição dos Níveis de Desempenho - Paebes (2023 x 2024)")
+
     st.plotly_chart(fig_grid, use_container_width=False)
+#_______________________________________________________________________________________________Mapa Coroplético________
+
+    st.subheader ("Mapa Coroplético - Regionalização")
+
+    import geopandas as gpd
+    import folium
+    from streamlit_folium import st_folium
+    import matplotlib.colors as mcolors
+    from unidecode import unidecode
+
+    # Ler shapefile e CSV de regionais
+    gdf_municipios = gpd.read_file ('data/shapefile_es/ES_Municipios_2024.shp')
+    df_municipios_regionais = pd.read_csv ('data/municipios_por_regional.csv', encoding='utf-8-sig')
+    df_municipios_regionais.rename (columns={'NM_MUN': 'municipio'}, inplace=True)
+    df_municipios_regionais ['regional'] = df_municipios_regionais['regional'].apply(lambda x: unidecode(str(x)).upper().strip())
 
 
+    # Normalização
+    gdf_municipios ['municipio'] = gdf_municipios ['NM_MUN'].str.upper ().str.strip ()
+    df_municipios_regionais ['municipio'] = df_municipios_regionais ['municipio'].str.upper ().str.strip ()
 
+    # Merge
+    gdf_mapa = gdf_municipios.merge (df_municipios_regionais, on='municipio', how='left')
+
+    # Simplificação para melhorar a performance no Streamlit
+    gdf_mapa ['geometry'] = gdf_mapa ['geometry'].simplify (0.001, preserve_topology=True)
+
+
+    # --- Filtrar a base para a regional escolhida ---
+    df_regional = df_municipios_regionais[df_municipios_regionais['regional'] == selecao_regional]
+
+
+    # --- Definir centroide e zoom dinâmico com base na área da regional ---
+
+    if selecao_regional == 'Todas':
+        municipios_regional = gdf_mapa ['municipio'].unique ().tolist ()
+        gdf_regional_geom = gdf_mapa [gdf_mapa ['municipio'].isin (municipios_regional)]
+
+    else:
+        municipios_regional = df_regional ['municipio'].tolist ()
+        gdf_regional_geom = gdf_mapa [gdf_mapa ['municipio'].isin (municipios_regional)] #Seleciona os municípios filtrados na base do mapa
+
+    regional_union = gdf_regional_geom.unary_union
+    regional_center = regional_union.centroid
+    center_lat = regional_center.y
+    center_lon = regional_center.x
+
+    area_km2 =  gdf_mapa ['AREA_KM2'] [gdf_mapa ['municipio'].isin (municipios_regional)].sum()
+
+
+    # Definir zoom dinâmico
+    if area_km2 < 1000:
+        zoom_level = 12
+    elif area_km2 < 2000:
+        zoom_level = 11
+    elif area_km2 < 4300:
+        zoom_level = 10
+    elif area_km2 < 6200:
+        zoom_level = 9
+    else:
+        zoom_level = 8
+
+    # Criar mapa
+    m = folium.Map (location=[center_lat, center_lon], zoom_start=zoom_level, tiles='cartodbpositron')
+
+    # Cores distintas para cada regional
+    color_dict = {
+    'SRE AFONSO CLAUDIO': '#FF4500',
+    'SRE COLATINA': '#f101ef',
+    'SRE CACHOEIRO DE ITAPEMIRIM': '#790ef3',
+    'SRE CARAPINA': '#3bad3e',
+    'SRE VILA VELHA': '#103c21',
+    'SRE LINHARES': '#067bb2',
+    'SRE SAO MATEUS': '#ec473b',
+    'SRE NOVA VENECIA': '#a2a380',
+    'SRE GUACUI': '#FFFF00',
+    'SRE BARRA DE SAO FRANCISCO': '#7b0089',
+    'SRE CARIACICA': '#2739a5'
+    }
+
+
+    # Adicionar polígonos
+    for _, row in gdf_mapa.iterrows ():
+        if pd.notnull (row ['regional']):
+            cor = color_dict.get (row ['regional'], 'gray')
+            folium.GeoJson (
+                row ['geometry'],
+                style_function=lambda x, color=cor: {
+                    'fillColor': color,
+                    'color': 'black',
+                    'weight': 0.5,
+                    'fillOpacity': 0.6
+                },
+                tooltip=f"{row ['municipio']} - {row ['regional']}"
+            ).add_to (m)
+
+    # Dissolver os municípios para formar os polígonos de cada regional
+    gdf_regionais = gdf_mapa.dissolve (by='regional', as_index=False)
+
+    # Calcular ponto representativo (melhor que o centroide para regiões irregulares)
+    gdf_regionais ['ponto'] = gdf_regionais.representative_point ()
+
+    # Adicionar os nomes das regionais como marcadores em negrito
+    for _, row in gdf_regionais.iterrows ():
+        ponto = row ['ponto']
+        nome = row ['regional']
+        folium.Marker (
+            location=[ponto.y, ponto.x],
+            icon=folium.DivIcon (html=f'''
+                <div style="
+                    font-weight: bold;
+                    font-size: 6pt;
+                    color: #4F4F4F;
+                    text-align: left;
+                    text-shadow: 1px 1px 2px white;
+                ">{nome}</div>''')
+        ).add_to (m)
+
+    st_folium (m, width=900, height=900)
 
 
 
