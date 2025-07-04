@@ -834,11 +834,11 @@ elif pagina == "Análise de Impacto":
 
     # Definir zoom dinâmico
     if area_km2 < 1000:
-        zoom_level = 12
-    elif area_km2 < 2000:
         zoom_level = 11
-    elif area_km2 < 4300:
+    elif area_km2 < 2000:
         zoom_level = 10
+    elif area_km2 < 4300:
+        zoom_level = 9
     elif area_km2 < 6200:
         zoom_level = 9
     else:
@@ -878,6 +878,72 @@ elif pagina == "Análise de Impacto":
                 tooltip=f"{row ['municipio']} - {row ['regional']}"
             ).add_to (m)
 
+
+
+    import pandas as pd
+    import folium
+    from folium import Icon
+    from branca.element import Template, MacroElement
+
+    # === Carregar a base ===
+    df_marcadores = pd.read_csv ("data/escolas_com_evolucao.csv")
+
+    # === Remover registros inválidos antes do cálculo ===
+    df_marcadores = df_marcadores.dropna (subset=['TX_ACERTO_24', 'TX_ACERTO_25', 'latitude', 'longitude'])
+    df_marcadores = df_marcadores [(df_marcadores ['TX_ACERTO_24'] > 0) & (df_marcadores ['TX_ACERTO_25'] > 0)]
+
+    # === Calcular evolução ===
+    df_marcadores ['evolucao_pct'] = df_marcadores ['TX_ACERTO_25'] - df_marcadores ['TX_ACERTO_24']
+
+
+    # === Categorizar evolução ===
+    def faixa_evolucao(valor):
+        if valor < 0:
+            return 'Regrediu'
+        elif valor < 5:
+            return 'Estável'
+        elif valor < 10:
+            return 'Evolução Moderada'
+        else:
+            return 'Evolução Significativa'
+
+
+    df_marcadores ['faixa'] = df_marcadores ['evolucao_pct'].apply (faixa_evolucao)
+
+    # === Cores ===
+    cores_faixa = {
+        'Regrediu': 'red',
+        'Estável': 'orange',
+        'Evolução Moderada': 'blue',
+        'Evolução Significativa': 'green'
+    }
+
+    import folium
+    from branca.element import Element
+
+    # === Adicionar marcadores como bolinhas simples com cor por faixa ===
+    for _, row in df_marcadores.iterrows ():
+        cor = cores_faixa [row ['faixa']]
+        popup_text = f"""
+        <b>{row ['NM_ESCOLA']}</b><br>
+        Município: {row ['NM_MUNICIPIO']}<br>
+        Acerto 2024: {row ['TX_ACERTO_24']}%<br>
+        Acerto 2025: {row ['TX_ACERTO_25']}%<br>
+        Evolução: {round (row ['evolucao_pct'], 1)} pp
+        """
+
+        folium.CircleMarker (
+            location=(row ['latitude'], row ['longitude']),
+            radius=4,  # tamanho da bolinha
+            color=cor,
+            fill=True,
+            fill_color=cor,
+            fill_opacity=0.9,
+            popup=folium.Popup (popup_text, max_width=300)
+        ).add_to (m)
+
+
+
     # Dissolver os municípios para formar os polígonos de cada regional
     gdf_regionais = gdf_mapa.dissolve (by='regional', as_index=False)
 
@@ -891,16 +957,39 @@ elif pagina == "Análise de Impacto":
         folium.Marker (
             location=[ponto.y, ponto.x],
             icon=folium.DivIcon (html=f'''
-                <div style="
-                    font-weight: bold;
-                    font-size: 6pt;
-                    color: #4F4F4F;
-                    text-align: left;
-                    text-shadow: 1px 1px 2px white;
-                ">{nome}</div>''')
+                    <div style="
+                        font-weight: bold;
+                        font-size: 6pt;
+                        color: #4F4F4F;
+                        text-align: left;
+                        text-shadow: 1px 1px 2px white;
+                    ">{nome}</div>''')
         ).add_to (m)
+    # === Legenda fixa e visível com texto preto ===
+    legenda_html = """
+    <div style="
+    position: absolute;
+    top: 2px;
+    right: 305px;
+    left: 50px;
+    background-color: rgba(137, 137, 137, 0.6);
+    border: none;
+    color: black;
+    padding: 4px;
+    font-size: 13px;
+    z-index: 9999;
+    box-shadow: 2px 2px 6px rgba(0,0,0,0.3);
+    ">
+    <b>Legenda - Evolução AMA: </b>
+    <span style='color:red'>&#9679;</span> Regrediu 
+    <span style='color:orange'>&#9679;</span> Estável 
+    <span style='color:blue'>&#9679;</span> Evolução Moderada 
+    <span style='color:green'>&#9679;</span> Evolução Significativa
+    </div>
+    """
 
-    st_folium (m, width=900, height=900)
+    m.get_root ().html.add_child (Element (legenda_html))
+    st_folium (m, width=700, height=700)
 
 
 
