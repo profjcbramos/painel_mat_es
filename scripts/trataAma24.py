@@ -1,7 +1,7 @@
 import pandas as pd
-import unicodedata
+
 from unidecode import unidecode
-import re
+
 
 #carregar dados
 ama2024 = pd.read_csv('../DadosBrutos/ama2024_1trim.csv', encoding = "ISO-8859-1", sep = ";")

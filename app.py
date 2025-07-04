@@ -10,6 +10,12 @@ import geopandas as gpd
 from folium.plugins import HeatMap
 from streamlit_folium import st_folium
 import branca.colormap as cm
+import numpy as np
+import plotly
+from plotly.subplots import make_subplots
+from unidecode import unidecode
+from branca.element import Element
+
 
 # ################################################################################ CONFIGURAÇÃO INICIAL  ##############
 
@@ -475,7 +481,6 @@ elif pagina == "Análise de Impacto":
 
     #================================ Boxplot Paebes ===============================================================
 
-    import plotly.graph_objects as go
 
     st.markdown ("### 📊 Evolução da Proficiência Média no Paebes (Língua Portuguesa e Matemática)")
 
@@ -539,9 +544,7 @@ elif pagina == "Análise de Impacto":
     st.plotly_chart(fig, use_container_width=False)
 
     #============================= Histogramas =============================================
-    import plotly.graph_objects as go
-    from plotly.subplots import make_subplots
-    import numpy as np
+
 
     # --- Mapeamento dos níveis e cores ---
     niveis = ['ct_muito_baixo', 'ct_baixo', 'ct_medio', 'ct_alto']
@@ -680,9 +683,6 @@ elif pagina == "Análise de Impacto":
     agrupado_mun['tipo'] = 'municipio'
     df_paebes_niveis = pd.concat([agrupado_regional, agrupado_mun], ignore_index=True)
 
-    import plotly.graph_objects as go
-    from plotly.subplots import make_subplots
-    import numpy as np
 
     # --- Mapeamento de níveis e cores ---
     niveis = ['abaixo_do_basico', 'basico', 'proficiente', 'avancado']
@@ -786,11 +786,6 @@ elif pagina == "Análise de Impacto":
 
     st.subheader ("Mapa Coroplético - Regionalização")
 
-    import geopandas as gpd
-    import folium
-    from streamlit_folium import st_folium
-    import matplotlib.colors as mcolors
-    from unidecode import unidecode
 
     # Ler shapefile e CSV de regionais
     gdf_municipios = gpd.read_file ('data/shapefile_es/ES_Municipios_2024.shp')
@@ -879,12 +874,6 @@ elif pagina == "Análise de Impacto":
             ).add_to (m)
 
 
-
-    import pandas as pd
-    import folium
-    from folium import Icon
-    from branca.element import Template, MacroElement
-
     # === Carregar a base ===
     df_marcadores = pd.read_csv ("data/escolas_com_evolucao.csv")
 
@@ -898,11 +887,11 @@ elif pagina == "Análise de Impacto":
 
     # === Categorizar evolução ===
     def faixa_evolucao(valor):
-        if valor < 0:
+        if valor < -2:
             return 'Regrediu'
-        elif valor < 5:
+        elif valor < 2:
             return 'Estável'
-        elif valor < 10:
+        elif valor < 8:
             return 'Evolução Moderada'
         else:
             return 'Evolução Significativa'
@@ -917,9 +906,6 @@ elif pagina == "Análise de Impacto":
         'Evolução Moderada': 'blue',
         'Evolução Significativa': 'green'
     }
-
-    import folium
-    from branca.element import Element
 
     # === Adicionar marcadores como bolinhas simples com cor por faixa ===
     for _, row in df_marcadores.iterrows ():
