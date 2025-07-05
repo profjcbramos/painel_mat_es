@@ -51,12 +51,23 @@ st.set_page_config (page_title='Painel Educacional - SEDU', layout='wide')
 
 # --- Carregamento da base de escolas---
 
-df = pd.read_csv ('data/dados_escolas.csv', encoding='utf-8-sig') #⚠️
+df_0 = pd.read_csv ('data/dados_escolas.csv', encoding='utf-8-sig') #⚠️
+colunas_alvo = ['idebes','ama_nu_acerto','ama_nu_total','ama_tx_acerto','olimpiada']
+df = df_0[~(
+    df_0[colunas_alvo].isnull() |                      # NaN
+    (df_0[colunas_alvo] == '') |                       # string vazia
+    (df_0[colunas_alvo] == 0)                          # zero
+).any(axis=1)]
 
 #<<<###############################################################--- Página: Visão Geral #######################>>>
 
 if pagina == "Visão Geral":
-    st.subheader ("Distribuição do Idebes por Regional")
+    st.title("Contextualização Geral")
+    st.markdown ("""
+    ### <i>Ensino Médio da Rede Pública Estadual</i>
+    """, unsafe_allow_html=True)
+
+    st.subheader ("Distribuição do Idebes 2024 por Regional")
 
     regionais = sorted (df ['regional'].dropna ().unique ()) # #⚠️ Listagem das regionais a partir do dataframe das escolas
 
@@ -69,6 +80,7 @@ if pagina == "Visão Geral":
         axes [idx].set_title (f"Regional: {reg}")
         axes [idx].set_ylabel ('Idebes')
         axes [idx].set_xlabel ('')
+        axes [idx].set_ylim (1, 7)  # ou o intervalo desejado
 
     # Se sobrarem quadrantes (porque só temos 11 regionais):
     for i in range (len (regionais), len (axes)):
@@ -80,7 +92,7 @@ if pagina == "Visão Geral":
     st.subheader ("Média Normalizada de AMA, Olimpíada e Idebes por Regional")
 
     # Normalizar AMA
-    df_media = df.groupby ('regional') [['ama_tx_acerto', 'olimpiada', 'idebes']].mean ().reset_index ()#⚠️
+    df_media = df.groupby ('regional') [['idebes','ama_tx_acerto', 'olimpiada']].mean ().reset_index ()#⚠️
     df_media ['ama_tx_acerto'] = df_media ['ama_tx_acerto'] / 10  # Normalizando para 0 a 10
 
     # Reformatar para plotagem
@@ -101,8 +113,13 @@ if pagina == "Visão Geral":
 
 elif pagina == "Regional":
 
-    st.title ("📍 Análise por Regional")
-       # --- Seletor de Regional ---
+    st.title ("Contextualização por Regional")
+
+    st.markdown ("""
+    ### <small><i>Ensino Médio da Rede Pública Estadual</i></small>
+    """, unsafe_allow_html=True)
+
+    # --- Seletor de Regional ---
     regionais = sorted (df ['regional'].dropna ().unique ()) # #⚠️
     selecao_regional = st.sidebar.selectbox ("Selecione a Regional:", regionais)
 
@@ -304,7 +321,14 @@ elif pagina == "Regional":
 ####################################################################################### Página: Análise de Impacto ####
 
 elif pagina == "Análise de Impacto":
-    st.title("📊 Análise de Impacto das Rotinas Pedagógicas")
+    st.title("Análise de Impacto das Rotinas Pedagógicas")
+
+    st.markdown ("""
+    ### <i>
+    Recorte Paebes: Ensino Médio da Rede Pública Estadual - Edições: 2023 e 2024</br>
+    Recorte AMA: 2ª série do Ensino Médio da Rede Pública Estadual - Edições: 1º trimestre de 2024 e 1º trimestre de 2025</i>
+    """, unsafe_allow_html=True)
+
 
     # --- Carregamento das bases específicas ---
 
@@ -348,7 +372,9 @@ elif pagina == "Análise de Impacto":
 
     # ================= VELOCÍMETROS =================
 
-    st.markdown("## 🎯 Evolução Geral - AMA (Escolas) e Paebes (Municípios)")
+    st.markdown("##Evolução Geral - AMA (Escolas) e Paebes (Municípios)")
+
+
 
     # --- Cálculo da média LP/MAT para AMA ---
     df_ama['TX_ACERTO_24'] = pd.to_numeric(df_ama['TX_ACERTO_24'], errors='coerce')
@@ -425,6 +451,11 @@ elif pagina == "Análise de Impacto":
             }
         ))
         st.plotly_chart(fig_mun, use_container_width=True)
+
+        st.markdown ("""
+            ###  
+            <small><i>Dados unificados de Língua Portuguesa e Matemática</i></small>
+            """, unsafe_allow_html=True)
 
     # A PARTIR DAQUI CONTINUAM OS BOXPLOTS (já usando os dados filtrados acima)
 
@@ -631,8 +662,13 @@ elif pagina == "Análise de Impacto":
     )
 
     st.markdown("### Distribuição dos Níveis de Desempenho - AMA (2024 x 2025)")
-    st.plotly_chart(fig_grid, use_container_width=False)
 
+
+    st.plotly_chart(fig_grid, use_container_width=False)
+    st.markdown ("""
+        ###  
+        <small><i>Dados unificados de Língua Portuguesa e Matemática</i></small>
+        """, unsafe_allow_html=True)
     ####################### Paebes 2023 e 2024 Barra Empilhadas ##########################
 
     # --- Unir as bases de LP e Matemática ---
@@ -782,6 +818,10 @@ elif pagina == "Análise de Impacto":
     st.markdown("### Distribuição dos Níveis de Desempenho - Paebes (2023 x 2024)")
 
     st.plotly_chart(fig_grid, use_container_width=False)
+    st.markdown ("""
+    ###  
+    <small><i>Dados unificados de Língua Portuguesa e Matemática</i></small>
+    """, unsafe_allow_html=True)
 #_______________________________________________________________________________________________Mapa Coroplético________
 
     st.subheader ("Mapa Coroplético - Regionalização")
